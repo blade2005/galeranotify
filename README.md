@@ -15,15 +15,17 @@ I hope someone finds it useful.
 Set up
 ------
 
-1. Edit galeranotify.py to change the configuration options.  They should be pretty straightforward.
+1. Copy to /usr/local/bin 
 
-2. Place galeranotify.py in a common location and make sure you and your MySql user have execute permissions.
+2. Copy galeranotify.conf to /etc.
 
-3. Manually execute galeranotify.py with several of the options set (check usage) and check to make sure the script executes with no errors and that you receive the notification e-mail.
+3. Change the galeranotify.conf to suit your needs
 
-4. Set 'wsrep_notify_cmd = <path of galeranotify.py>' in your my.cnf file.
+4. Test run of your settings to ensure it is working and you are receiving emails.
 
-5. Restart MySql.
+5. Set 'wsrep_notify_cmd = <path of galeranotify.py>' in your my.cnf file.
+
+6. Restart MySql.
 
 SELinux
 -------

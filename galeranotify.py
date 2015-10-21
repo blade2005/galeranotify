@@ -14,8 +14,9 @@
 import os
 import sys
 import getopt
-
 import smtplib
+import ConfigParser
+import argparse
 
 try: from email.mime.text import MIMEText
 except ImportError:
@@ -24,95 +25,97 @@ except ImportError:
 
 import socket
 
-# Change this to some value if you don't want your server hostname to show in
-# the notification emails
-THIS_SERVER = socket.gethostname()
-
-# Server hostname or IP address
-SMTP_SERVER = 'YOUR_SMTP_HERE'
-SMTP_PORT = 25
-
-# Set to True if you need SMTP over SSL
-SMTP_SSL = False
-
-# Set to True if you need to authenticate to your SMTP server
-SMTP_AUTH = False
-# Fill in authorization information here if True above
-SMTP_USERNAME = ''
-SMTP_PASSWORD = ''
-
-# Takes a single sender
-MAIL_FROM = 'YOUR_EMAIL_HERE'
-# Takes a list of recipients
-MAIL_TO = ['SOME_OTHER_EMAIL_HERE']
+configfile = '/etc/galeranotify.conf'
 
 # Edit below at your own risk
 ################################################################################
+# Change this to some value if you don't want your server hostname to show in
+# the notification emails
+hostname = socket.gethostname()
+
+config = ConfigParser.ConfigParser()
+if os.path.exists(configfile):
+    config.read(configfile)
+else:
+    print "Missing %s. Exiting." % (configfile)
+    sys.exit(1)
+
+config = config._sections['galeranotify']
+
 def main(argv):
-    str_status = ''
-    str_uuid = ''
-    str_primary = ''
-    str_members = ''
-    str_index = ''
-    message = ''
-
-    usage = "Usage: " + os.path.basename(sys.argv[0]) + " --status <status str>"
-    usage += " --uuid <state UUID> --primary <yes/no> --members <comma-seperated"
-    usage += " list of the component member UUIDs> --index <n>"
-
+    parser = argparse.ArgumentParser(
+        description=(
+            'Notify by Email from config file of changes in the Galera Cluster'
+        )
+    )
+    parser.add_argument(
+        '--status',
+        action='store',
+        required=True,
+        type=str,
+        help='<status str>'
+    )
+    parser.add_argument(
+        '--uuid',
+        action='store',
+        required=True,
+        type=str,
+        help='<state UUID>'
+    )
+    parser.add_argument(
+        '--primary',
+        action='store',
+        required=True,
+        type=str,
+        help='<yes/no>'
+    ),
+    parser.add_argument(
+        '--members',
+        action='store',
+        required=True,
+        type=str,
+        help='<comma-seperated list of the component member UUIDs>'
+    )
+    parser.add_argument(
+        '--index',
+        action='store',
+        required=True,
+        type=str,
+        help='<n>'
+    )
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(1)
+    args_obj = parser.parse_args()
+    args = vars(args_obj)
+    # if args['']
     try:
-        opts, args = getopt.getopt(argv, "h", ["status=","uuid=",'primary=','members=','index='])
-    except getopt.GetoptError:
-        print usage
-        sys.exit(2)
-
-    if(len(opts) > 0):
-        message_obj = GaleraStatus(THIS_SERVER)
-
-        for opt, arg in opts:
-            if opt == '-h':
-                print usage
-                sys.exit()
-            elif opt in ("--status"):
-                message_obj.set_status(arg)
-            elif opt in ("--uuid"):
-                message_obj.set_uuid(arg)
-            elif opt in ("--primary"):
-                message_obj.set_primary(arg)
-            elif opt in ("--members"):
-                message_obj.set_members(arg)
-            elif opt in ("--index"):
-                message_obj.set_index(arg)
-        try:
-            send_notification(MAIL_FROM, MAIL_TO, 'Galera Notification: ' + THIS_SERVER,
-                              str(message_obj), SMTP_SERVER, SMTP_PORT, SMTP_SSL, SMTP_AUTH,
-                              SMTP_USERNAME, SMTP_PASSWORD)
-        except Exception, e:
-            print "Unable to send notification: %s" % e
-            sys.exit(1)
-    else:
-        print usage
-        sys.exit(2)
-
+        send_notification(
+            config, 
+            'Galera Notification: ' + hostname,
+            str(GaleraStatus(hostname)),
+        )
+    except Exception, e:
+        print "Unable to send notification: %s" % e
+        sys.exit(1)
     sys.exit(0)
 
-def send_notification(from_email, to_email, subject, message, smtp_server,
-                      smtp_port, use_ssl, use_auth, smtp_user, smtp_pass):
+def send_notification(config, subject, message):
     msg = MIMEText(message)
 
-    msg['From'] = from_email
-    msg['To'] = ', '.join(to_email)
+    msg['From'] = config['from']
+    msg['To'] = ', '.join(config['to'])
     msg['Subject'] =  subject
 
-    if(use_ssl):
-        mailer = smtplib.SMTP_SSL(smtp_server, smtp_port)
+    if(config['ssl']):
+        mailer = smtplib.SMTP_SSL(config['host'], config['port'])
     else:
-        mailer = smtplib.SMTP(smtp_server, smtp_port)
+        mailer = smtplib.SMTP(config['port'], config['port'])
 
-    if(use_auth):
-        mailer.login(smtp_user, smtp_pass)
+    if(config['auth']):
+        mailer.login(config['username'], config['password'])
 
-    mailer.sendmail(from_email, to_email, msg.as_string())
+    mailer.sendmail(config['from'], config['to'], msg.as_string())
     mailer.close()
 
 class GaleraStatus:
