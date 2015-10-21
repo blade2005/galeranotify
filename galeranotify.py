@@ -1,7 +1,9 @@
 #!/usr/bin/python
+'''
+Script to send email notifications when a change in Galera cluster membership
+occurs.
+'''
 #
-# Script to send email notifications when a change in Galera cluster membership
-# occurs.
 #
 # Complies with http://www.codership.com/wiki/doku.php?id=notification_command
 #
@@ -13,36 +15,38 @@
 
 import os
 import sys
-import getopt
 import smtplib
 import ConfigParser
 import argparse
+import datetime
+import socket
 
-try: from email.mime.text import MIMEText
+try:
+    from email.mime.text import MIMEText
 except ImportError:
     # Python 2.4 (CentOS 5.x)
     from email.MIMEText import MIMEText
 
-import socket
 
-configfile = '/etc/galeranotify.conf'
+CONFIGFILE = '/etc/galeranotify.conf'
 
 # Edit below at your own risk
-################################################################################
-# Change this to some value if you don't want your server hostname to show in
+###############################################################################
+# Change this to some value if you don't want your server HOSTNAME to show in
 # the notification emails
-hostname = socket.gethostname()
+HOSTNAME = socket.gethostname()
 
-config = ConfigParser.ConfigParser()
-if os.path.exists(configfile):
-    config.read(configfile)
-else:
-    print "Missing %s. Exiting." % (configfile)
-    sys.exit(1)
 
-config = config._sections['galeranotify']
+def main():
+    '''Main'''
+    config = ConfigParser.ConfigParser()
+    if os.path.exists(CONFIGFILE):
+        config.read(CONFIGFILE)
+    else:
+        print "Missing %s. Exiting." % (CONFIGFILE)
+        sys.exit(1)
 
-def main(argv):
+    config = dict(config.items('galeranotify'))
     parser = argparse.ArgumentParser(
         description=(
             'Notify by Email from config file of changes in the Galera Cluster'
@@ -68,7 +72,7 @@ def main(argv):
         required=True,
         type=str,
         help='<yes/no>'
-    ),
+    )
     parser.add_argument(
         '--members',
         action='store',
@@ -88,24 +92,33 @@ def main(argv):
         sys.exit(1)
     args_obj = parser.parse_args()
     args = vars(args_obj)
-    # if args['']
+    isodate = datetime.datetime.now().strftime('%Y-%m-%d %H:%M')
+    subject = 'Galera Notification: %s %s' % (HOSTNAME, isodate)
+    message_obj = GaleraStatus(HOSTNAME)
+    message_obj.set_status(args['status'])
+    message_obj.set_uuid(args['uuid'])
+    message_obj.set_primary(args['primary'])
+    message_obj.set_members(args['members'])
+    message_obj.set_index(args['index'])
     try:
         send_notification(
-            config, 
-            'Galera Notification: ' + hostname,
-            str(GaleraStatus(hostname)),
+            config,
+            subject,
+            str(message_obj),
         )
-    except Exception, e:
-        print "Unable to send notification: %s" % e
+    except Exception, exception:
+        print "Unable to send notification: %s" % exception
         sys.exit(1)
     sys.exit(0)
 
+
 def send_notification(config, subject, message):
+    '''Send notification by eamil'''
     msg = MIMEText(message)
 
     msg['From'] = config['from']
     msg['To'] = ', '.join(config['to'])
-    msg['Subject'] =  subject
+    msg['Subject'] = subject
 
     if(config['ssl']):
         mailer = smtplib.SMTP_SSL(config['host'], config['port'])
@@ -118,7 +131,12 @@ def send_notification(config, subject, message):
     mailer.sendmail(config['from'], config['to'], msg.as_string())
     mailer.close()
 
+
 class GaleraStatus:
+    '''
+        Return a object populated with the information for status about the
+        Galera Cluster
+    '''
     def __init__(self, server):
         self._server = server
         self._status = ""
@@ -129,28 +147,36 @@ class GaleraStatus:
         self._count = 0
 
     def set_status(self, status):
+        '''Set status variable'''
         self._status = status
         self._count += 1
 
     def set_uuid(self, uuid):
+        '''Set uuid variable'''
         self._uuid = uuid
         self._count += 1
 
     def set_primary(self, primary):
+        '''Set primary variable'''
         self._primary = primary.capitalize()
         self._count += 1
 
     def set_members(self, members):
+        '''Set members variables'''
         self._members = members.split(',')
         self._count += 1
 
     def set_index(self, index):
+        '''Set index variable'''
         self._index = index
         self._count += 1
 
     def __str__(self):
-        message = "Galera running on " + self._server + " has reported the following"
-        message += " cluster membership change"
+        '''Return a message from the variables set previously'''
+        message = ('Galera running on %s  has reported the following  cluster '
+            'membership change') % (
+            self._server
+        )
 
         if(self._count > 1):
             message += "s"
@@ -164,7 +190,9 @@ class GaleraStatus:
             message += "Cluster state UUID: " + self._uuid + "\n\n"
 
         if(self._primary):
-            message += "Current cluster component is primary: " + self._primary + "\n\n"
+            message += "Current cluster component is primary: %s\n\n" % (
+                self._primary
+            )
 
         if(self._members):
             message += "Current members of the component:\n"
@@ -183,9 +211,11 @@ class GaleraStatus:
             message += "\n"
 
         if(self._index):
-            message += "Index of this node in the member list: " + self._index + "\n"
+            message += "Index of this node in the member list: %s\n\n" % (
+                self._index
+            )
 
         return message
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    main()
