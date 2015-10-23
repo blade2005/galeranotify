@@ -47,6 +47,7 @@ def main():
         sys.exit(1)
 
     config = dict(config.items('galeranotify'))
+    config['to'] = [e.strip() for e in config['to'].split(',')]
     parser = argparse.ArgumentParser(
         description=(
             'Notify by Email from config file of changes in the Galera Cluster'
@@ -117,6 +118,7 @@ def send_notification(config, subject, message):
     msg = MIMEText(message)
 
     msg['From'] = config['from']
+    print config['to']
     msg['To'] = ', '.join(config['to'])
     msg['Subject'] = subject
 
